@@ -1,0 +1,50 @@
+{
+    "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+    "model_name": "gemini-1.5-flash",
+    "temperature": 0.3,
+    "max_tokens": 8192,
+    "log_level": "DEBUG",
+    "pdf_processing": {
+        "dpi": 200,
+        "max_images": 10
+    },
+    "output": {
+        "default_formats": ["excel", "markdown"],
+        "output_directory": "/Users/hideki/Desktop/PDF knowledge extractor"
+    },
+    "analysis_prompt": {
+        "custom_prompt": "",
+        "default_categories": {
+            "概念・理論": "ビジネス概念、戦略理論、フレームワーク、基本原理など",
+            "方法論・手順": "実施方法、プロセス、ステップ、手順、やり方など",
+            "事例・ケーススタディ": "具体例、成功事例、失敗事例、実際の取り組み、企業事例など",
+            "データ・数値": "統計数値、売上データ、市場規模、パーセンテージ、年度、金額など",
+            "注意点・リスク": "注意すべき点、課題、問題点、リスク要因、障害など",
+            "ベストプラクティス": "推奨事項、成功のコツ、効果的な方法、改善案など"
+        },
+        "extraction_instructions": "文書から読み取れる内容を積極的に抽出し、各カテゴリーに分類してください。「情報が見つかりません」ではなく、具体的な内容を記述してください。"
+    },
+    "detailed_analysis_prompt": {
+        "custom_prompt": "",
+        "default_categories": {
+            "概念・理論": "ビジネス概念、戦略理論、フレームワーク、基本原理、定義など",
+            "方法論・手順": "実施方法、プロセス、ステップ、手順、やり方、具体的な手順など",
+            "事例・ケーススタディ": "具体例、成功事例、失敗事例、実際の取り組み、企業事例、実例など",
+            "データ・数値": "統計数値、売上データ、市場規模、パーセンテージ、年度、金額、具体的な数値など",
+            "注意点・リスク": "注意すべき点、課題、問題点、リスク要因、障害、制約など",
+            "ベストプラクティス": "推奨事項、成功のコツ、効果的な方法、改善案、最適解など",
+            "詳細情報": "見出し、タイトル、表の内容、脚注、補足情報など"
+        },
+        "extraction_instructions": "文書の構造化された情報（見出し、本文、表、脚注など）を活用して、できるだけ詳細で具体的な内容を抽出してください。各項目にはページ番号も含めてください。"
+    },
+    "extraction_settings": {
+        "default_mode": "raw_text_only",
+        "header_font_size_threshold": 14,
+        "footnote_position_threshold": 700,
+        "table_extraction_enabled": true,
+        "formatting_preservation": true,
+        "raw_extraction_formats": ["json", "txt", "markdown", "yaml"],
+        "include_font_info": true,
+        "include_position_info": true
+    }
+} 

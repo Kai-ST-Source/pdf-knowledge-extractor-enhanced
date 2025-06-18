@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Project specific
+output/*
+!output/.gitkeep
+temp/*
+!temp/.gitkeep
+*.log
+.env
+config.local.json
+
+# PyInstaller
+*.spec
+*.manifest
+*.pkg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# API Keys and sensitive data
+*api_key*
+*API_KEY*
+credentials.json
+config.json
+!config.example.json
+
+# Temporary files
+extraction.log
+debug.log
