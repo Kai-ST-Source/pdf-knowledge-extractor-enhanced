@@ -18,8 +18,8 @@ class ConfigManager:
         "model_name": "gemini-1.5-flash",
         "temperature": 0.3,
         "max_tokens": 8192,
-        "output_dir": "~/Desktop/PDF knowledge extractor",
-        "supported_formats": ["excel", "markdown"],
+        "output_dir": "~/Desktop/pdf_knowledge_extractor",
+        "supported_formats": ["markdown", "txt"],
         "log_level": "DEBUG",
         "max_images_per_pdf": 10,
         "image_dpi": 200,
@@ -69,7 +69,15 @@ class ConfigManager:
                 
             # Merge with defaults
             config = self.DEFAULT_CONFIG.copy()
-            config.update(user_config)
+            
+            # Handle nested output configuration
+            if 'output' in user_config and 'output_directory' in user_config['output']:
+                config['output_dir'] = user_config['output']['output_directory']
+            
+            # Update with flat structure
+            for key, value in user_config.items():
+                if key != 'output':  # Skip output as we handled it above
+                    config[key] = value
             
             # Expand paths
             if 'output_dir' in config:

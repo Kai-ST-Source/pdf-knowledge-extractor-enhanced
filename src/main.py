@@ -18,7 +18,7 @@ import logging
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core import PDFExtractor, AIAnalyzer, DataExporter
-from gui import PDFExtractorGUI
+from gui import MainWindow as PDFExtractorGUI
 from utils import ConfigManager, setup_logger, NotificationManager
 
 
@@ -56,13 +56,10 @@ class PDFKnowledgeExtractorApp:
         self.temp_dir = Path(tempfile.mkdtemp(prefix="pdf_extractor_"))
         self.pdf_extractor = PDFExtractor(self.temp_dir)
         
-        self.ai_analyzer = AIAnalyzer(
-            api_key=self.config_manager.get('gemini_api_key'),
-            model_name=self.config_manager.get('model_name'),
-            temperature=self.config_manager.get('temperature'),
-            max_tokens=self.config_manager.get('max_tokens'),
-            config_manager=self.config_manager
-        )
+        # Make config accessible
+        self.config = self.config_manager.config
+        
+        self.ai_analyzer = AIAnalyzer(self.config_manager.config)
         
         self.data_exporter = DataExporter()
         self.notifications = NotificationManager()
@@ -77,6 +74,18 @@ class PDFKnowledgeExtractorApp:
         self.logger.info(f"Working directory: {os.getcwd()}")
         self.logger.info(f"Is frozen: {getattr(sys, 'frozen', False)}")
         self.logger.info(f"Command line args: {sys.argv}")
+    
+    def process_pdf(self, pdf_path: Path, output_formats: List[str] = None) -> Dict[str, Any]:
+        """Process a single PDF file.
+        
+        Args:
+            pdf_path: Path to the PDF file
+            output_formats: List of output formats
+            
+        Returns:
+            Processing results
+        """
+        return self.process_files([pdf_path])[0]
     
     def process_files(self, file_paths: List[Path]) -> List[Dict[str, Any]]:
         """Process PDF files and extract knowledge.
@@ -163,15 +172,10 @@ class PDFKnowledgeExtractorApp:
         output_dir = Path(self.config_manager.get('output_dir')).expanduser()
         formats = self.config_manager.get('supported_formats', ['excel', 'markdown'])
         
-        gui = PDFExtractorGUI(
-            process_callback=self.process_files,
-            output_dir=output_dir,
-            formats=formats,
-            logger=self.logger
-        )
-        
-        if hasattr(gui, 'run'):
-            gui.run()
+        import tkinter as tk
+        root = tk.Tk()
+        gui = PDFExtractorGUI(root, self)
+        root.mainloop()
     
     def run_cli(self, input_files: List[str]):
         """Run the application in CLI mode.

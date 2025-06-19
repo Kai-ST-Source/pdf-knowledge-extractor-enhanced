@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-PDF Knowledge Extractor
-
-A tool for extracting structured knowledge from PDF documents using AI.
-Supports various document types and outputs in multiple formats.
+PDF Knowledge Extractor - Enhanced Version
+Extracts knowledge from PDF files with multiple extraction modes
 """
 
 import os
@@ -47,6 +45,18 @@ if sys.platform == "darwin":
         NSUserNotification = None
         NSUserNotificationCenter = None
 
+# Set environment variables for macOS Tkinter compatibility
+os.environ['TK_SILENCE_DEPRECATION'] = '1'
+if sys.platform == 'darwin':
+    os.environ['PYTHON_CONFIGURE_OPTS'] = '--enable-framework'
+    # Try to use system Tkinter
+    try:
+        tk._test()
+    except Exception as e:
+        print(f"Tkinter test failed: {e}")
+        # Fallback to alternative display
+        os.environ['DISPLAY'] = ':0'
+
 class PDFKnowledgeExtractor:
     """Main class for extracting knowledge from PDF documents."""
     
@@ -54,31 +64,123 @@ class PDFKnowledgeExtractor:
         """Initialize the extractor with configuration."""
         self.config = self._load_config(config_path)
         self.setup_logging()
-        self.setup_gemini()
+        
+        # Initialize Gemini client only if API key is provided and not in raw text mode
+        self.gemini_client = None
+        if self.config.get("gemini_api_key") and self.config.get("extraction_settings", {}).get("default_mode") != "raw_text_only":
+            try:
+                genai.configure(api_key=self.config["gemini_api_key"])
+                self.gemini_client = genai.GenerativeModel(self.config["model_name"])
+                logging.info("Gemini client initialized successfully")
+            except Exception as e:
+                logging.warning(f"Failed to initialize Gemini client: {e}")
+                logging.info("Continuing without AI analysis - raw text extraction only")
+        else:
+            logging.info("No API key provided or raw text mode selected - AI analysis disabled")
+        
         self.temp_dir = Path(tempfile.mkdtemp(prefix="pdf_extractor_"))
         self.results = []
         
         # Initialize core components
         self.extractor = PDFExtractor(self.temp_dir)
-        self.analyzer = AIAnalyzer(
-            api_key=self.config.get("gemini_api_key"),
-            model_name=self.config.get("model_name", "gemini-1.5-flash"),
-            temperature=self.config.get("temperature", 0.3),
-            max_tokens=self.config.get("max_tokens", 8192),
-            config_manager=self.config
-        )
+        
+        # Initialize analyzer only if Gemini client is available
+        self.analyzer = None
+        if self.gemini_client:
+            try:
+                from core.analyzer import AIAnalyzer
+                self.analyzer = AIAnalyzer(self.config)
+                logging.info("AI Analyzer initialized successfully")
+            except Exception as e:
+                logging.warning(f"Failed to initialize AI Analyzer: {e}")
+        else:
+            logging.info("AI Analyzer disabled - no Gemini client available")
+        
+        self.output_dir = Path(self.config["output"]["output_directory"])
+        self.output_dir.mkdir(exist_ok=True)
+        
+        logging.info("PDF Knowledge Extractor initialized successfully")
         
     def _load_config(self, config_path: str) -> Dict[str, Any]:
         """Load configuration from JSON file."""
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            logging.error(f"Configuration file not found: {config_path}")
-            raise
-        except json.JSONDecodeError as e:
-            logging.error(f"Invalid JSON in configuration file: {e}")
-            raise
+            # Try multiple possible config file locations
+            possible_paths = [
+                config_path,
+                Path(__file__).parent / config_path,
+                Path(__file__).parent.parent / config_path,
+                Path.home() / "Desktop" / "PDF knowledge extractor" / config_path,
+                # For PyInstaller bundled app
+                Path(sys._MEIPASS) / config_path if hasattr(sys, '_MEIPASS') else None
+            ]
+            
+            # Filter out None values
+            possible_paths = [p for p in possible_paths if p is not None]
+            
+            config_file = None
+            for path in possible_paths:
+                if Path(path).exists():
+                    config_file = path
+                    break
+            
+            if config_file is None:
+                # Create default config if none exists
+                default_config = {
+                    "gemini_api_key": "",
+                    "model_name": "gemini-1.5-flash",
+                    "temperature": 0.3,
+                    "max_tokens": 8192,
+                    "log_level": "INFO",
+                    "pdf_processing": {
+                        "dpi": 200,
+                        "max_images": 10
+                    },
+                    "output": {
+                        "default_formats": ["json", "txt", "markdown"],
+                        "output_directory": str(Path.home() / "Desktop" / "PDF knowledge extractor")
+                    },
+                    "extraction_settings": {
+                        "default_mode": "raw_text_only",
+                        "header_font_size_threshold": 14,
+                        "footnote_position_threshold": 700,
+                        "table_extraction_enabled": True,
+                        "formatting_preservation": True,
+                        "raw_extraction_formats": ["json", "txt", "markdown", "yaml"],
+                        "include_font_info": True,
+                        "include_position_info": True
+                    }
+                }
+                
+                # Save default config to user's desktop
+                output_dir = Path.home() / "Desktop" / "PDF knowledge extractor"
+                output_dir.mkdir(exist_ok=True)
+                config_file = output_dir / "config.json"
+                
+                with open(config_file, 'w', encoding='utf-8') as f:
+                    json.dump(default_config, f, ensure_ascii=False, indent=4)
+                
+                logging.info(f"Created default config file: {config_file}")
+            
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                
+            logging.info(f"Loaded config from: {config_file}")
+            return config
+            
+        except Exception as e:
+            logging.error(f"Error loading configuration: {e}")
+            # Return minimal default config
+            return {
+                "gemini_api_key": "",
+                "model_name": "gemini-1.5-flash",
+                "temperature": 0.3,
+                "max_tokens": 8192,
+                "log_level": "INFO",
+                "output": {
+                    "default_formats": ["json", "txt", "markdown"],
+                    "output_directory": str(Path.home() / "Desktop" / "PDF knowledge extractor")
+                }
+            }
     
     def setup_logging(self):
         """Setup logging configuration."""
@@ -95,21 +197,6 @@ class PDFKnowledgeExtractor:
             ]
         )
         
-    def setup_gemini(self):
-        """Setup Google Gemini API."""
-        api_key = self.config.get("gemini_api_key")
-        if not api_key:
-            raise ValueError("Gemini API key not found in configuration")
-        
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name=self.config.get("model_name", "gemini-1.5-flash"),
-            generation_config=genai.types.GenerationConfig(
-                temperature=self.config.get("temperature", 0.3),
-                max_output_tokens=self.config.get("max_tokens", 8192)
-            )
-        )
-    
     def process_file_detailed(self, file_path: Path, output_dir: Path, formats: List[str]) -> Dict[str, Any]:
         """Process a single file with detailed text extraction.
         
@@ -137,7 +224,17 @@ class PDFKnowledgeExtractor:
             
             # Analyze with detailed information
             self.send_notification("PDF Knowledge Extractor", "AIで詳細知見を分析中...")
-            results = self.analyzer.analyze_detailed(detailed_text_info, images)
+            # Analyze with AI if analyzer is available
+            if self.analyzer:
+                try:
+                    results = self.analyzer.analyze_detailed(detailed_text_info, images)
+                    logging.info("Detailed AI analysis completed successfully")
+                except Exception as e:
+                    logging.error(f"Error in detailed AI analysis: {e}")
+                    results = {"error": f"AI analysis failed: {e}"}
+            else:
+                logging.info("Skipping AI analysis - analyzer not available")
+                results = {"note": "AI analysis skipped - no API key or analyzer not available"}
             
             # Add metadata
             results['metadata'] = {
@@ -189,7 +286,17 @@ class PDFKnowledgeExtractor:
             
             # Analyze with AI
             self.send_notification("PDF Knowledge Extractor", "AIで知見を分析中...")
-            results = self.analyzer.analyze(text, images)
+            # Analyze with AI if analyzer is available
+            if self.analyzer:
+                try:
+                    results = self.analyzer.analyze(text, images)
+                    logging.info("Standard AI analysis completed successfully")
+                except Exception as e:
+                    logging.error(f"Error in standard AI analysis: {e}")
+                    results = {"error": f"AI analysis failed: {e}"}
+            else:
+                logging.info("Skipping AI analysis - analyzer not available")
+                results = {"note": "AI analysis skipped - no API key or analyzer not available"}
             
             # Add metadata
             results['metadata'] = {
@@ -309,7 +416,7 @@ class PDFKnowledgeExtractor:
                 if image_path.exists():
                     content.append(Image.open(image_path))
             
-            response = self.model.generate_content(content)
+            response = self.gemini_client.generate_content(content)
             return self._parse_gemini_response(response.text)
             
         except Exception as e:
@@ -630,83 +737,27 @@ class PDFKnowledgeExtractor:
 
 class PDFExtractorGUI:
     def __init__(self, extractor: PDFKnowledgeExtractor):
-        debug_log_path = "/Users/hideki/Desktop/PDF knowledge extractor/debug.log"
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("PDFExtractorGUI.__init__ starting...\n")
-        
+        """Initialize the GUI."""
         self.extractor = extractor
         self.output_dir = Path("/Users/hideki/Desktop/PDF knowledge extractor")
         self.formats = ["json", "excel", "markdown"]
         
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("Creating tkinter root window...\n")
-        
-        # Create main window
+        # Create main window with minimal setup
         self.root = tk.Tk()
+        self.root.title("PDF Knowledge Extractor - Enhanced")
+        self.root.geometry("600x500")
         
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("Root window created, setting properties...\n")
+        # Simple window positioning
+        self.root.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (500 // 2)
+        self.root.geometry(f"600x500+{x}+{y}")
         
-        self.root.title("PDF Knowledge Extractor")
-        self.root.geometry("500x400")
-        self.root.configure(bg="#f0f0f0")
+        # Setup UI
+        self.setup_ui()
         
-        # Protocol handler to prevent accidental closure
+        # Protocol handler
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("Window properties set, configuring visibility...\n")
-        
-        # Ensure window appears on main screen
-        try:
-            # Process any pending events first
-            self.root.update_idletasks()
-            
-            with open(debug_log_path, "a", encoding="utf-8") as f:
-                f.write("Calculating window position...\n")
-            
-            # Calculate center position
-            screen_width = self.root.winfo_screenwidth()
-            screen_height = self.root.winfo_screenheight()
-            x = (screen_width - 500) // 2
-            y = (screen_height - 400) // 2
-            
-            # Set geometry
-            self.root.geometry(f"500x400+{x}+{y}")
-            
-            with open(debug_log_path, "a", encoding="utf-8") as f:
-                f.write(f"Window positioned at {x},{y}\n")
-            
-            # Make window visible and bring to front
-            self.root.deiconify()
-            self.root.lift()
-            self.root.attributes('-topmost', True)
-            self.root.focus_force()
-            
-            # Process events to ensure window is displayed
-            self.root.update()
-            
-            with open(debug_log_path, "a", encoding="utf-8") as f:
-                f.write("Window brought to front and focused\n")
-            
-            # Remove topmost after brief delay but keep focused
-            self.root.after(100, lambda: self.root.attributes('-topmost', False))
-            
-        except Exception as e:
-            with open(debug_log_path, "a", encoding="utf-8") as f:
-                f.write(f"Error in window visibility setup: {e}\n")
-                import traceback
-                f.write(f"Traceback: {traceback.format_exc()}\n")
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("Window visibility commands completed, setting up UI...\n")
-        
-        # Defer UI setup to ensure window is ready
-        self.root.after_idle(self.setup_ui)
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("PDFExtractorGUI.__init__ completed\n")
     
     def on_closing(self):
         """Handle window closing event."""
@@ -921,24 +972,7 @@ class PDFExtractorGUI:
         thread.start()
     
     def run(self):
-        debug_log_path = "/Users/hideki/Desktop/PDF knowledge extractor/debug.log"
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("PDFExtractorGUI.run() starting mainloop...\n")
-            f.write(f"Window state before mainloop: {self.root.state()}\n")
-            f.write(f"Window geometry: {self.root.geometry()}\n")
-            f.write(f"Window is visible: {self.root.winfo_viewable()}\n")
-        
-        try:
-            self.root.mainloop()
-        except Exception as e:
-            with open(debug_log_path, "a", encoding="utf-8") as f:
-                f.write(f"Exception in mainloop: {e}\n")
-                import traceback
-                f.write(f"Traceback: {traceback.format_exc()}\n")
-        
-        with open(debug_log_path, "a", encoding="utf-8") as f:
-            f.write("PDFExtractorGUI.run() mainloop ended\n")
+        self.root.mainloop()
 
 def main():
     """Main entry point."""

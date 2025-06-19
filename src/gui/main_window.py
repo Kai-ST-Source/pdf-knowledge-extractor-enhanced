@@ -1,294 +1,239 @@
+#!/usr/bin/env python3
 """
-Main GUI window for PDF Knowledge Extractor.
+Simple GUI for PDF Knowledge Extractor
 """
 
-import os
-import sys
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, filedialog, messagebox
+from pathlib import Path
 import threading
 import logging
-from pathlib import Path
-from typing import List, Optional
 
-from gui.file_handler import FileHandler
-from gui.progress_dialog import ProgressDialog
-from utils.notifications import NotificationManager
-
-
-class PDFExtractorGUI:
+class MainWindow:
     """Main GUI window for PDF Knowledge Extractor."""
     
-    def __init__(self, process_callback, output_dir: Path, 
-                 formats: List[str], logger: Optional[logging.Logger] = None):
-        """Initialize GUI.
+    def __init__(self, root, app):
+        """Initialize the main window."""
+        self.root = root
+        self.app = app
         
-        Args:
-            process_callback: Callback function to process files
-            output_dir: Output directory for results
-            formats: List of output formats
-            logger: Logger instance
-        """
-        self.logger = logger or logging.getLogger(__name__)
-        self.process_callback = process_callback
-        self.output_dir = output_dir
-        self.formats = formats
-        self.file_handler = FileHandler(self.logger)
-        self.notifications = NotificationManager()
+        logging.info("Initializing MainWindow")
         
-        # Check if running as frozen app on macOS
-        self.is_frozen = getattr(sys, 'frozen', False)
-        self.is_macos = sys.platform == "darwin"
+        # Configure window
+        self.root.title("PDF Knowledge Extractor")
+        self.root.geometry("600x500")
+        self.root.resizable(True, True)
         
-        # Don't create GUI if frozen macOS app (use file dialog directly)
-        if self.is_frozen and self.is_macos:
-            self.logger.info("Running as frozen macOS app - using direct file dialog")
-            self._run_direct_mode()
-        else:
-            self._create_gui()
-    
-    def _run_direct_mode(self):
-        """Run in direct mode without GUI window."""
-        # Select files immediately
-        files = self.file_handler.select_files_dialog()
+        # Center window
+        self.center_window()
         
-        if files:
-            # Validate files
-            valid_files = self.file_handler.validate_pdf_files(files)
-            
-            if valid_files:
-                # Process files directly
-                self.logger.info(f"Processing {len(valid_files)} files in direct mode")
-                
-                try:
-                    # Call the process callback
-                    results = self.process_callback(valid_files)
-                    
-                    # Send completion notification
-                    self.notifications.send_completion(
-                        len(results), 
-                        len(valid_files),
-                        "PDF Knowledge Extraction"
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error processing files: {e}")
-                    self.notifications.send_error(str(e))
-            else:
-                self.logger.warning("No valid PDF files selected")
-        else:
-            self.logger.info("No files selected")
-    
-    def _create_gui(self):
-        """Create the GUI window."""
-        self.logger.info("Creating GUI window")
+        # Create UI
+        logging.info("Creating widgets...")
+        self.create_widgets()
+        logging.info("Widgets created successfully")
         
-        try:
-            self.root = tk.Tk()
-            self.root.title("PDF Knowledge Extractor")
-            self.root.geometry("500x400")
-            
-            # Configure window
-            self.root.configure(bg="#f0f0f0")
-            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-            
-            # Center window
-            self._center_window()
-            
-            # Setup UI components
-            self._setup_ui()
-            
-            # Make window visible
-            self.root.deiconify()
-            self.root.lift()
-            self.root.attributes('-topmost', True)
-            self.root.focus_force()
-            
-            # Remove topmost after brief delay
-            self.root.after(100, lambda: self.root.attributes('-topmost', False))
-            
-            self.logger.info("GUI created successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Error creating GUI: {e}")
-            raise
-    
-    def _center_window(self):
+        # Setup event handlers
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+    def center_window(self):
         """Center the window on screen."""
         self.root.update_idletasks()
-        
-        window_width = 500
-        window_height = 400
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        x = (self.root.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (500 // 2)
+        self.root.geometry(f"600x500+{x}+{y}")
     
-    def _setup_ui(self):
-        """Setup UI components."""
+    def create_widgets(self):
+        """Create and arrange widgets."""
+        # Main frame
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Configure grid weights
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        
         # Title
-        title_label = tk.Label(
-            self.root, 
+        title_label = ttk.Label(
+            main_frame, 
             text="PDF Knowledge Extractor",
-            font=("Arial", 18, "bold"),
-            bg="#f0f0f0",
-            fg="#333333"
+            font=("Arial", 18, "bold")
         )
-        title_label.pack(pady=20)
+        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
         
-        # File selection frame
-        self.select_frame = tk.Frame(
-            self.root,
-            bg="#ffffff",
-            relief=tk.RAISED,
-            borderwidth=2,
-            width=400,
-            height=200
-        )
-        self.select_frame.pack(pady=20, padx=50, fill=tk.BOTH, expand=True)
-        self.select_frame.pack_propagate(False)
+        # File selection
+        ttk.Label(main_frame, text="PDFファイル:").grid(row=1, column=0, sticky=tk.W, pady=5)
         
-        # File selection label
-        self.select_label = tk.Label(
-            self.select_frame,
-            text="📄\n\nクリックしてPDFファイルを選択\n\n複数ファイル選択可能",
-            font=("Arial", 14),
-            bg="#ffffff",
-            fg="#666666",
-            justify=tk.CENTER,
-            cursor="hand2"
-        )
-        self.select_label.pack(expand=True)
+        self.file_var = tk.StringVar()
+        self.file_entry = ttk.Entry(main_frame, textvariable=self.file_var, width=50)
+        self.file_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(5, 5), pady=5)
         
-        # Select button
-        self.select_button = tk.Button(
-            self.root,
-            text="📁 PDFファイルを選択",
-            font=("Arial", 12, "bold"),
-            bg="#4CAF50",
-            fg="white",
-            relief=tk.FLAT,
-            padx=20,
-            pady=10,
-            cursor="hand2",
-            command=self.select_files
+        ttk.Button(main_frame, text="選択", command=self.select_file).grid(row=1, column=2, pady=5)
+        
+        # Extraction mode
+        ttk.Label(main_frame, text="抽出モード:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        
+        self.mode_var = tk.StringVar(value="raw_text_only")
+        mode_combo = ttk.Combobox(main_frame, textvariable=self.mode_var, state="readonly", width=20)
+        mode_combo['values'] = [
+            "raw_text_only",
+            "standard", 
+            "detailed"
+        ]
+        mode_combo.grid(row=2, column=1, sticky=tk.W, padx=(5, 5), pady=5)
+        
+        # Output formats
+        ttk.Label(main_frame, text="出力形式:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        
+        self.format_var = tk.StringVar(value="json")
+        format_combo = ttk.Combobox(main_frame, textvariable=self.format_var, state="readonly", width=20)
+        format_combo['values'] = ["json", "txt", "markdown", "yaml"]
+        format_combo.grid(row=3, column=1, sticky=tk.W, padx=(5, 5), pady=5)
+        
+        # Extract button
+        self.extract_button = ttk.Button(
+            main_frame, 
+            text="抽出開始", 
+            command=self.start_extraction
         )
-        self.select_button.pack(pady=10)
+        self.extract_button.grid(row=4, column=1, pady=20)
+        
+        # Progress bar
+        self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
+        self.progress.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         
         # Status label
-        self.status_var = tk.StringVar(value="待機中...")
-        self.status_label = tk.Label(
-            self.root,
-            textvariable=self.status_var,
-            font=("Arial", 10),
-            bg="#f0f0f0",
-            fg="#333333"
-        )
-        self.status_label.pack(pady=5)
+        self.status_var = tk.StringVar(value="PDFファイルを選択してください")
+        self.status_label = ttk.Label(main_frame, textvariable=self.status_var)
+        self.status_label.grid(row=6, column=0, columnspan=3, pady=5)
         
-        # Output location label
-        output_label = tk.Label(
-            self.root,
-            text=f"出力先: {self.output_dir}",
-            font=("Arial", 9),
-            bg="#f0f0f0",
-            fg="#666666"
-        )
-        output_label.pack(pady=5)
+        # Log text area
+        ttk.Label(main_frame, text="ログ:").grid(row=7, column=0, sticky=tk.W, pady=5)
         
-        # Bind events
-        self.select_frame.bind("<Button-1>", lambda e: self.select_files())
-        self.select_label.bind("<Button-1>", lambda e: self.select_files())
+        # Create frame for log area
+        log_frame = ttk.Frame(main_frame)
+        log_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
         
-        # Hover effects
-        self.select_frame.bind("<Enter>", lambda e: self.select_frame.configure(bg="#f8f8f8"))
-        self.select_frame.bind("<Leave>", lambda e: self.select_frame.configure(bg="#ffffff"))
+        # Text widget and scrollbar
+        self.log_text = tk.Text(log_frame, height=10, width=80)
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # Configure main frame grid weights for log area
+        main_frame.rowconfigure(8, weight=1)
+        
+        # Setup logging to GUI
+        self.setup_gui_logging()
     
-    def select_files(self):
-        """Handle file selection."""
-        files = self.file_handler.select_files_dialog(self.root)
-        
-        if files:
-            # Validate files
-            valid_files = self.file_handler.validate_pdf_files(files)
+    def setup_gui_logging(self):
+        """Setup logging to display in GUI."""
+        class GUILogHandler(logging.Handler):
+            def __init__(self, text_widget):
+                super().__init__()
+                self.text_widget = text_widget
             
-            if valid_files:
-                self.process_files(valid_files)
-            else:
-                messagebox.showwarning(
-                    "Invalid Files",
-                    "No valid PDF files were selected."
-                )
+            def emit(self, record):
+                # Avoid recursive logging
+                if record.name == __name__:
+                    return
+                    
+                msg = self.format(record)
+                # Use after to avoid blocking
+                self.text_widget.after(0, lambda: self._insert_text(msg))
+            
+            def _insert_text(self, msg):
+                try:
+                    self.text_widget.insert(tk.END, msg + '\n')
+                    self.text_widget.see(tk.END)
+                except:
+                    pass  # Ignore errors in GUI logging
+        
+        # Add GUI handler to root logger
+        gui_handler = GUILogHandler(self.log_text)
+        gui_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+        gui_handler.setLevel(logging.INFO)  # Only show INFO and above
+        logging.getLogger().addHandler(gui_handler)
     
-    def process_files(self, files: List[Path]):
-        """Process selected files.
+    def select_file(self):
+        """Open file dialog to select PDF file."""
+        file_path = filedialog.askopenfilename(
+            title="PDFファイルを選択",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+        )
         
-        Args:
-            files: List of file paths to process
-        """
-        # Create progress dialog
-        progress = ProgressDialog(self.root, "Processing PDFs", len(files))
+        if file_path:
+            self.file_var.set(file_path)
+            self.status_var.set(f"選択されたファイル: {Path(file_path).name}")
+    
+    def start_extraction(self):
+        """Start the extraction process."""
+        pdf_path = self.file_var.get().strip()
         
-        def worker():
-            try:
-                results = []
-                
-                for i, file_path in enumerate(files):
-                    if progress.is_cancelled():
-                        break
-                        
-                    # Update progress
-                    self.root.after(0, lambda i=i, f=file_path: progress.update(
-                        i + 1, 
-                        f"Processing {i+1}/{len(files)}",
-                        f.name
-                    ))
-                    
-                    # Process file
-                    try:
-                        result = self.process_callback([file_path])
-                        results.extend(result)
-                    except Exception as e:
-                        self.logger.error(f"Error processing {file_path}: {e}")
-                        self.root.after(0, lambda e=e: messagebox.showerror(
-                            "Processing Error",
-                            f"Error: {str(e)}"
-                        ))
-                
-                # Complete
-                if not progress.is_cancelled():
-                    self.root.after(0, lambda: progress.complete("Processing complete!"))
-                    self.root.after(0, lambda: self.notifications.send_completion(
-                        len(results),
-                        len(files),
-                        "PDF Knowledge Extraction"
-                    ))
-                    
-                    # Update status
-                    self.root.after(0, lambda: self.status_var.set(
-                        f"完了: {len(results)} ファイルを処理しました"
-                    ))
-                
-            except Exception as e:
-                self.logger.error(f"Error in processing thread: {e}")
-                self.root.after(0, lambda: progress.error(str(e)))
-                self.root.after(0, lambda: self.notifications.send_error(str(e)))
-            finally:
-                # Close progress dialog after delay
-                self.root.after(2000, progress.close)
+        if not pdf_path:
+            messagebox.showerror("エラー", "PDFファイルを選択してください。")
+            return
         
-        # Start processing in background thread
-        thread = threading.Thread(target=worker, daemon=True)
+        pdf_file = Path(pdf_path)
+        if not pdf_file.exists():
+            messagebox.showerror("エラー", "選択されたファイルが見つかりません。")
+            return
+        
+        # Disable button and show progress
+        self.extract_button.config(state='disabled')
+        self.progress.start()
+        self.status_var.set("処理中...")
+        
+        # Run extraction in separate thread
+        thread = threading.Thread(target=self.run_extraction, args=(pdf_file,))
+        thread.daemon = True
         thread.start()
+    
+    def run_extraction(self, pdf_file):
+        """Run extraction in background thread."""
+        try:
+            # Update config with current settings
+            if "extraction_settings" not in self.app.config:
+                self.app.config["extraction_settings"] = {}
+            self.app.config["extraction_settings"]["default_mode"] = self.mode_var.get()
+            self.app.config["extraction_mode"] = self.mode_var.get()
+            output_formats = [self.format_var.get()]
+            
+            # Process the PDF
+            results = self.app.process_pdf(pdf_file, output_formats=output_formats)
+            
+            # Update UI on main thread
+            self.root.after(0, self.extraction_completed, results)
+            
+        except Exception as e:
+            # Show error on main thread
+            self.root.after(0, self.extraction_failed, str(e))
+    
+    def extraction_completed(self, results):
+        """Handle successful extraction completion."""
+        self.progress.stop()
+        self.extract_button.config(state='normal')
+        self.status_var.set("抽出完了！")
+        
+        output_dir = Path(self.app.config.get("output", {}).get("output_directory", "~/Desktop/PDF knowledge extractor")).expanduser()
+        messagebox.showinfo(
+            "完了", 
+            f"抽出が完了しました。\n結果は {output_dir} に保存されました。"
+        )
+    
+    def extraction_failed(self, error_msg):
+        """Handle extraction failure."""
+        self.progress.stop()
+        self.extract_button.config(state='normal')
+        self.status_var.set("エラーが発生しました")
+        
+        messagebox.showerror("エラー", f"抽出中にエラーが発生しました:\n{error_msg}")
     
     def on_closing(self):
         """Handle window closing."""
         self.root.quit()
         self.root.destroy()
-    
-    def run(self):
-        """Run the GUI."""
-        if hasattr(self, 'root'):
-            self.root.mainloop()

@@ -12,33 +12,32 @@ from PIL import Image
 class AIAnalyzer:
     """Analyze documents using Google Gemini AI."""
     
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-flash", 
-                 temperature: float = 0.3, max_tokens: int = 8192, config_manager=None):
-        """Initialize AI analyzer.
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize the analyzer with configuration."""
+        self.config = config
+        self.api_key = config.get("gemini_api_key")
         
-        Args:
-            api_key: Google Gemini API key
-            model_name: Model name to use
-            temperature: Generation temperature
-            max_tokens: Maximum output tokens
-            config_manager: Configuration manager for custom prompts
-        """
-        self.logger = logging.getLogger(__name__)
-        self.config_manager = config_manager
-        
-        # Configure Gemini
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name=model_name,
-            generation_config=genai.types.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens
-            )
-        )
+        # Initialize Gemini client only if API key is provided
+        self.gemini_client = None
+        if self.api_key:
+            try:
+                genai.configure(api_key=self.api_key)
+                self.gemini_client = genai.GenerativeModel(
+                    model_name=config.get("model_name", "gemini-1.5-flash"),
+                    generation_config=genai.types.GenerationConfig(
+                        temperature=config.get("temperature", 0.3),
+                        max_output_tokens=config.get("max_tokens", 8192)
+                    )
+                )
+                logging.info("Gemini client initialized successfully in analyzer")
+            except Exception as e:
+                logging.warning(f"Failed to initialize Gemini client in analyzer: {e}")
+        else:
+            logging.info("No API key provided - AI analysis disabled in analyzer")
         
         # Load categories from config or use defaults
-        if config_manager and config_manager.get('analysis_prompt', {}).get('default_categories'):
-            self.categories = {k: [] for k in config_manager.get('analysis_prompt', {}).get('default_categories', {}).keys()}
+        if config.get('analysis_prompt', {}).get('default_categories'):
+            self.categories = {k: [] for k in config.get('analysis_prompt', {}).get('default_categories', {}).keys()}
         else:
             self.categories = {
                 "概念・理論": [],
@@ -68,9 +67,9 @@ class AIAnalyzer:
             # Add text if available
             if text.strip():
                 content.append(f"Document Text:\n{text}")
-                self.logger.debug(f"Added text content: {len(text)} characters")
+                logging.debug(f"Added text content: {len(text)} characters")
             else:
-                self.logger.warning("No text content available for analysis")
+                logging.warning("No text content available for analysis")
             
             # Add images (limit to prevent token overflow)
             image_count = 0
@@ -79,23 +78,23 @@ class AIAnalyzer:
                     try:
                         content.append(Image.open(image_path))
                         image_count += 1
-                        self.logger.debug(f"Added image: {image_path}")
+                        logging.debug(f"Added image: {image_path}")
                     except Exception as e:
-                        self.logger.warning(f"Failed to load image {image_path}: {e}")
+                        logging.warning(f"Failed to load image {image_path}: {e}")
             
-            self.logger.info(f"Sending to Gemini: {len(content)} content items ({image_count} images)")
+            logging.info(f"Sending to Gemini: {len(content)} content items ({image_count} images)")
             
-            response = self.model.generate_content(content)
+            response = self.gemini_client.generate_content(content)
             
             if not response or not response.text:
-                self.logger.error("Empty response from Gemini")
+                logging.error("Empty response from Gemini")
                 raise ValueError("Empty response from Gemini")
             
-            self.logger.debug(f"Gemini response length: {len(response.text)} characters")
+            logging.debug(f"Gemini response length: {len(response.text)} characters")
             return self._parse_response(response.text)
             
         except Exception as e:
-            self.logger.error(f"Error analyzing with Gemini: {e}")
+            logging.error(f"Error analyzing with Gemini: {e}")
             raise
     
     def analyze_detailed(self, detailed_text_info: Dict[str, Any], images: List[Path]) -> Dict[str, Any]:
@@ -118,12 +117,12 @@ class AIAnalyzer:
             structured_content = self._build_structured_content(detailed_text_info)
             if structured_content:
                 content.append(f"Structured Document Content:\n{structured_content}")
-                self.logger.debug(f"Added structured content: {len(structured_content)} characters")
+                logging.debug(f"Added structured content: {len(structured_content)} characters")
             
             # Add raw text as fallback
             if detailed_text_info.get('raw_text', '').strip():
                 content.append(f"Raw Document Text:\n{detailed_text_info['raw_text']}")
-                self.logger.debug(f"Added raw text: {len(detailed_text_info['raw_text'])} characters")
+                logging.debug(f"Added raw text: {len(detailed_text_info['raw_text'])} characters")
             
             # Add images
             image_count = 0
@@ -132,23 +131,23 @@ class AIAnalyzer:
                     try:
                         content.append(Image.open(image_path))
                         image_count += 1
-                        self.logger.debug(f"Added image: {image_path}")
+                        logging.debug(f"Added image: {image_path}")
                     except Exception as e:
-                        self.logger.warning(f"Failed to load image {image_path}: {e}")
+                        logging.warning(f"Failed to load image {image_path}: {e}")
             
-            self.logger.info(f"Sending detailed analysis to Gemini: {len(content)} content items ({image_count} images)")
+            logging.info(f"Sending detailed analysis to Gemini: {len(content)} content items ({image_count} images)")
             
-            response = self.model.generate_content(content)
+            response = self.gemini_client.generate_content(content)
             
             if not response or not response.text:
-                self.logger.error("Empty response from Gemini")
+                logging.error("Empty response from Gemini")
                 raise ValueError("Empty response from Gemini")
             
-            self.logger.debug(f"Gemini detailed response length: {len(response.text)} characters")
+            logging.debug(f"Gemini detailed response length: {len(response.text)} characters")
             return self._parse_detailed_response(response.text, detailed_text_info)
             
         except Exception as e:
-            self.logger.error(f"Error analyzing with detailed information: {e}")
+            logging.error(f"Error analyzing with detailed information: {e}")
             raise
     
     def _build_structured_content(self, detailed_text_info: Dict[str, Any]) -> str:
@@ -191,16 +190,16 @@ class AIAnalyzer:
     def _build_detailed_analysis_prompt(self) -> str:
         """Build detailed analysis prompt for fine-grained extraction."""
         # Check for custom prompt in config
-        if (self.config_manager and 
-            self.config_manager.get('detailed_analysis_prompt', {}).get('custom_prompt')):
-            return self.config_manager.get('detailed_analysis_prompt', {}).get('custom_prompt')
+        if (self.config and 
+            self.config.get('detailed_analysis_prompt', {}).get('custom_prompt')):
+            return self.config.get('detailed_analysis_prompt', {}).get('custom_prompt')
         
         # Build default detailed prompt
         categories_section = ""
         format_section = ""
         
-        if self.config_manager and self.config_manager.get('detailed_analysis_prompt', {}).get('default_categories'):
-            categories_config = self.config_manager.get('detailed_analysis_prompt', {}).get('default_categories', {})
+        if self.config and self.config.get('detailed_analysis_prompt', {}).get('default_categories'):
+            categories_config = self.config.get('detailed_analysis_prompt', {}).get('default_categories', {})
             
             # Build categories section
             for i, (category, description) in enumerate(categories_config.items(), 1):
@@ -260,8 +259,8 @@ class AIAnalyzer:
         
         # Get detailed extraction instructions from config
         extraction_instructions = ""
-        if self.config_manager and self.config_manager.get('detailed_analysis_prompt', {}).get('extraction_instructions'):
-            extraction_instructions = self.config_manager.get('detailed_analysis_prompt', {}).get('extraction_instructions')
+        if self.config and self.config.get('detailed_analysis_prompt', {}).get('extraction_instructions'):
+            extraction_instructions = self.config.get('detailed_analysis_prompt', {}).get('extraction_instructions')
         else:
             extraction_instructions = "文書の構造化された情報（見出し、本文、表、脚注など）を活用して、できるだけ詳細で具体的な内容を抽出してください。各項目にはページ番号も含めてください。"
         
@@ -298,7 +297,7 @@ class AIAnalyzer:
         lines = response_text.split('\n')
         
         # Debug: Log the response for troubleshooting
-        self.logger.debug(f"Detailed AI Response:\n{response_text}")
+        logging.debug(f"Detailed AI Response:\n{response_text}")
         
         # First pass: Look for category headers
         category_patterns = {}
@@ -330,7 +329,7 @@ class AIAnalyzer:
             for category, patterns in category_patterns.items():
                 if any(pattern in line for pattern in patterns):
                     current_category = category
-                    self.logger.debug(f"Found category '{category}' at line {i}: {line}")
+                    logging.debug(f"Found category '{category}' at line {i}: {line}")
                     break
             
             # Extract items with enhanced detection
@@ -357,7 +356,7 @@ class AIAnalyzer:
                 # Add item if substantial
                 if item and len(item) > 5 and not item.startswith('情報は見つかりません'):
                     categories[current_category].append(item)
-                    self.logger.debug(f"Added detailed item to {current_category}: {item[:60]}...")
+                    logging.debug(f"Added detailed item to {current_category}: {item[:60]}...")
         
         # Second pass: Extract additional information from structured data
         self._extract_from_structured_data(categories, detailed_text_info)
@@ -371,7 +370,7 @@ class AIAnalyzer:
         total_items = sum(len(items) for items in categories.values())
         meaningful_items = sum(1 for items in categories.values() for item in items 
                              if not item.startswith('この文書からは'))
-        self.logger.info(f"Detailed extraction results: {total_items} total items ({meaningful_items} meaningful)")
+        logging.info(f"Detailed extraction results: {total_items} total items ({meaningful_items} meaningful)")
         
         return categories
     
@@ -405,16 +404,16 @@ class AIAnalyzer:
     def _build_analysis_prompt(self) -> str:
         """Build the analysis prompt for AI."""
         # Check for custom prompt in config
-        if (self.config_manager and 
-            self.config_manager.get('analysis_prompt', {}).get('custom_prompt')):
-            return self.config_manager.get('analysis_prompt', {}).get('custom_prompt')
+        if (self.config and 
+            self.config.get('analysis_prompt', {}).get('custom_prompt')):
+            return self.config.get('analysis_prompt', {}).get('custom_prompt')
         
         # Build default prompt using config categories
         categories_section = ""
         format_section = ""
         
-        if self.config_manager and self.config_manager.get('analysis_prompt', {}).get('default_categories'):
-            categories_config = self.config_manager.get('analysis_prompt', {}).get('default_categories', {})
+        if self.config and self.config.get('analysis_prompt', {}).get('default_categories'):
+            categories_config = self.config.get('analysis_prompt', {}).get('default_categories', {})
             
             # Build categories section
             for i, (category, description) in enumerate(categories_config.items(), 1):
@@ -466,8 +465,8 @@ class AIAnalyzer:
         
         # Get extraction instructions from config
         extraction_instructions = ""
-        if self.config_manager and self.config_manager.get('analysis_prompt', {}).get('extraction_instructions'):
-            extraction_instructions = self.config_manager.get('analysis_prompt', {}).get('extraction_instructions')
+        if self.config and self.config.get('analysis_prompt', {}).get('extraction_instructions'):
+            extraction_instructions = self.config.get('analysis_prompt', {}).get('extraction_instructions')
         else:
             extraction_instructions = "文書から読み取れる内容を積極的に抽出し、各カテゴリーに分類してください。「情報が見つかりません」ではなく、具体的な内容を記述してください。"
         
@@ -501,7 +500,7 @@ class AIAnalyzer:
         lines = response_text.split('\n')
         
         # Debug: Log the response for troubleshooting
-        self.logger.debug(f"AI Response:\n{response_text}")
+        logging.debug(f"AI Response:\n{response_text}")
         
         # First pass: Look for category headers
         category_patterns = {}
@@ -533,7 +532,7 @@ class AIAnalyzer:
             for category, patterns in category_patterns.items():
                 if any(pattern in line for pattern in patterns):
                     current_category = category
-                    self.logger.debug(f"Found category '{category}' at line {i}: {line}")
+                    logging.debug(f"Found category '{category}' at line {i}: {line}")
                     break
             
             # Extract items - more flexible detection
@@ -560,11 +559,11 @@ class AIAnalyzer:
                 # Add item if substantial
                 if item and len(item) > 5 and not item.startswith('情報は見つかりません'):
                     categories[current_category].append(item)
-                    self.logger.debug(f"Added item to {current_category}: {item[:60]}...")
+                    logging.debug(f"Added item to {current_category}: {item[:60]}...")
         
         # Second pass: If no structured format found, try to extract any meaningful content
         if all(not items for items in categories.values()):
-            self.logger.warning("No structured items found, attempting content extraction")
+            logging.warning("No structured items found, attempting content extraction")
             
             # Look for any meaningful sentences that could be knowledge
             for line in lines:
@@ -599,6 +598,6 @@ class AIAnalyzer:
         total_items = sum(len(items) for items in categories.values())
         meaningful_items = sum(1 for items in categories.values() for item in items 
                              if not item.startswith('この文書からは'))
-        self.logger.info(f"Extraction results: {total_items} total items ({meaningful_items} meaningful)")
+        logging.info(f"Extraction results: {total_items} total items ({meaningful_items} meaningful)")
         
         return categories

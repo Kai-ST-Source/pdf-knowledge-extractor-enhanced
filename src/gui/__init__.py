@@ -1,12 +1,7 @@
 """
-GUI components for PDF Knowledge Extractor.
-
-This module contains the graphical user interface components
-for file selection, progress display, and user interaction.
+GUI package for PDF Knowledge Extractor
 """
 
-from gui.main_window import PDFExtractorGUI
-from gui.file_handler import FileHandler
-from gui.progress_dialog import ProgressDialog
+from .main_window import MainWindow
 
-__all__ = ['PDFExtractorGUI', 'FileHandler', 'ProgressDialog']
+__all__ = ['MainWindow']
