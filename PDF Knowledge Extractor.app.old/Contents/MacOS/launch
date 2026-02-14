@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Get the source directory
+SOURCE_DIR="/Users/hideki/Documents/10_Applications/pdf_knowledge_extractor_mac"
+
+# Debug log
+LOG_FILE="$SOURCE_DIR/app_launch_debug.log"
+echo "=== Launch started at $(date) ===" >> "$LOG_FILE"
+echo "Script: $0" >> "$LOG_FILE"
+echo "PWD: $(pwd)" >> "$LOG_FILE"
+echo "PATH: $PATH" >> "$LOG_FILE"
+
+# Change to source directory
+cd "$SOURCE_DIR"
+echo "Changed to: $(pwd)" >> "$LOG_FILE"
+
+# Use venv Python
+PYTHON="$SOURCE_DIR/venv/bin/python3"
+echo "Python to use: $PYTHON" >> "$LOG_FILE"
+echo "Python version: $($PYTHON --version 2>&1)" >> "$LOG_FILE"
+echo "Python arch: $(file $PYTHON)" >> "$LOG_FILE"
+
+# Check if files were passed as arguments (drag and drop)
+if [ $# -gt 0 ]; then
+    # Process dropped PDF files
+    echo "Processing $# dropped files" >> "$LOG_FILE"
+    for file in "$@"; do
+        if [[ "$file" == *.pdf ]]; then
+            echo "Launching with file: $file" >> "$LOG_FILE"
+            "$PYTHON" src/app.py "$file" >> "$LOG_FILE" 2>&1
+        fi
+    done
+else
+    # No files provided - launch GUI
+    echo "Launching GUI" >> "$LOG_FILE"
+    "$PYTHON" src/app.py >> "$LOG_FILE" 2>&1
+fi

@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Create marker file to prove script ran
+echo "Script executed at $(date)" > /tmp/pdf_extractor_debug.txt
+
+# Get the source directory
+SOURCE_DIR="/Users/hideki/Documents/10_Applications/pdf_knowledge_extractor_mac"
+
+# Change to source directory
+cd "$SOURCE_DIR"
+echo "Changed to: $(pwd)" >> /tmp/pdf_extractor_debug.txt
+
+# Use venv Python
+PYTHON="$SOURCE_DIR/venv/bin/python3"
+echo "Python: $PYTHON" >> /tmp/pdf_extractor_debug.txt
+echo "Python version: $($PYTHON --version 2>&1)" >> /tmp/pdf_extractor_debug.txt
+
+# Check if files were passed as arguments (drag and drop)
+if [ $# -gt 0 ]; then
+    # Process dropped PDF files
+    echo "Processing files: $@" >> /tmp/pdf_extractor_debug.txt
+    for file in "$@"; do
+        if [[ "$file" == *.pdf ]]; then
+            exec "$PYTHON" src/app.py "$file"
+        fi
+    done
+else
+    # No files provided - launch GUI
+    echo "Launching GUI" >> /tmp/pdf_extractor_debug.txt
+    exec "$PYTHON" src/app.py
+fi

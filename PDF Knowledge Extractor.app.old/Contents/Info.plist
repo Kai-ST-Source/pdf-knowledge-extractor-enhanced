@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>PDF Knowledge Extractor</string>
+    <string>launch</string>
     <key>CFBundleIconFile</key>
     <string>app_icon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.pdfextractor.newapp.2025</string>
+    <string>com.pdfextractor.app</string>
     <key>CFBundleName</key>
     <string>PDF Knowledge Extractor</string>
     <key>CFBundleVersion</key>
